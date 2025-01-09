@@ -1,2 +1,2 @@
 # nn-from-scratch
-Building a Multilayer Perceptron
+Building a Multilayer Perceptron from scratch using PyTorch primatives
