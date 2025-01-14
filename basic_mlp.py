@@ -46,37 +46,34 @@ def deriv_relu(x):
     #Derivative of relu function returns 0 for negative values and 1 for positive values
     return (x > 0).float()
 
-def training_pass(data, labels, weights_input, weights_hl1, bias_input, bias_hl1):
+def forward_pass(data, weights_input, weights_hl1, bias_input, bias_hl1):
     flattened_data = torch.flatten(data, start_dim=1)
-
-    #print(flattened_data[0])
 
     input_layer = torch.mm(flattened_data, weights_input) + bias_input
     input_layer_relu = relu(input_layer)
-
-    #print(input_layer[0])
 
     hidden_1 =  torch.mm(input_layer_relu, weights_hl1) + bias_hl1
 
     predictions = softmax(hidden_1, 1)
 
-    deriv_loss_wrt_logits = predictions - labels
-    deriv_loss_wrt_weights_hl1 = torch.mm(input_layer_relu.T, deriv_loss_wrt_logits) / data.size(0)
-    deriv_loss_wrt_bias_hl1 = torch.sum(deriv_loss_wrt_logits, dim=0) / data.size(0)
+    return predictions, input_layer, input_layer_relu
 
-    deriv_loss_wrt_input_layer_outputs = torch.mm(deriv_loss_wrt_logits, weights_hl1.T)
-    deriv_loss_wrt_input_layer_outputs_activation = deriv_loss_wrt_input_layer_outputs * deriv_relu(input_layer)
-    deriv_loss_wrt_weights_input = torch.mm(flattened_data.T, deriv_loss_wrt_input_layer_outputs_activation) / data.size(0)
-    deriv_loss_wrt_bias_input = torch.sum(deriv_loss_wrt_input_layer_outputs_activation, dim=0) / data.size(0)
+def backwards_pass(data, labels, weights_input, bias_input, input_layer, input_layer_relu, weights_hl1, bias_hl1, predictions, learning_rate):
+    data = torch.flatten(data, start_dim=1)
 
-    learning_rate = 0.01
+    dz1 = predictions - labels
+    dw1 = torch.mm(input_layer_relu.T, dz1) / data.size(0)
+    db1 = torch.sum(dz1, dim=0) / data.size(0)
 
-    weights_input -= learning_rate * deriv_loss_wrt_weights_input
-    bias_input -= learning_rate * deriv_loss_wrt_bias_input
-    weights_hl1 -= learning_rate * deriv_loss_wrt_weights_hl1
-    bias_hl1 -= learning_rate * deriv_loss_wrt_bias_hl1
+    dz0 = torch.mm(dz1, weights_hl1.T)
+    da0 = dz0 * deriv_relu(input_layer)
+    dw0 = torch.mm(data.T, da0) / data.size(0)
+    db0 = torch.sum(da0, dim=0) / data.size(0)
 
-    return predictions
+    weights_input -= learning_rate * dw0
+    bias_input -= learning_rate * db0
+    weights_hl1 -= learning_rate * dw1
+    bias_hl1 -= learning_rate * db1
 
 def cross_entropy_loss(predictions, labels):
     loss = -torch.sum(labels* torch.log(predictions + 1e-8)) / predictions.size(0)
@@ -87,10 +84,31 @@ epochs = 10
 for epoch in range(epochs):
     epoch_loss = 0
     for data, labels in train_dataloader:
-        predictions = training_pass(data, labels, weights_input, weights_hl1, bias_input, bias_hl1)
+        predictions, input_layer, input_layer_relu = forward_pass(data, weights_input, weights_hl1, bias_input, bias_hl1)
 
         loss = cross_entropy_loss(predictions, labels)
         epoch_loss += loss.item()
-    print(epoch_loss)
-    print(len(train_dataloader))
+
+        learning_rate = 0.001
+
+        backwards_pass(data, labels, weights_input, bias_input, input_layer, input_layer_relu, weights_hl1, bias_hl1, predictions, learning_rate)
+
     print(f"Epoch {epoch+1}, Loss: {epoch_loss / len(train_dataloader)}")
+
+overall_loss = 0
+overall_accuracy = 0
+overall_class_accuracy = torch.zeros(output_size)
+
+for data, labels in test_dataloader:
+    predictions, input_layer, input_layer_relu = forward_pass(data, weights_input, weights_hl1, bias_input, bias_hl1)
+
+    loss = cross_entropy_loss(predictions, labels).item()
+    overall_loss += loss
+
+    number_correct = torch.sum(torch.argmax(predictions, dim=1) == torch.argmax(labels, dim=1))
+    accuracy = number_correct / len(predictions)
+    overall_accuracy += accuracy
+
+
+print(f"Test Loss: {overall_loss/len(test_dataloader)}")
+print(f"Test Accuracy: {overall_accuracy/len(test_dataloader)}")
