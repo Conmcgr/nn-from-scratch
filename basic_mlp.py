@@ -38,26 +38,38 @@ bias_hl1 = torch.zeros(output_size, requires_grad=False)
 def softmax(x, dim):
     return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True)
 
+def relu(x):
+    #ReLu function returns 0 fro negatives else returns value
+    return torch.maximum(x, torch.zeros_like(x))
+
+def deriv_relu(x):
+    #Derivative of relu function returns 0 for negative values and 1 for positive values
+    return (x > 0).float()
 
 def training_pass(data, labels, weights_input, weights_hl1, bias_input, bias_hl1):
     flattened_data = torch.flatten(data, start_dim=1)
 
+    #print(flattened_data[0])
 
     input_layer = torch.mm(flattened_data, weights_input) + bias_input
-    hidden_1 =  torch.mm(input_layer, weights_hl1) + bias_hl1
+    input_layer_relu = relu(input_layer)
 
+    #print(input_layer[0])
+
+    hidden_1 =  torch.mm(input_layer_relu, weights_hl1) + bias_hl1
 
     predictions = softmax(hidden_1, 1)
 
     deriv_loss_wrt_logits = predictions - labels
-    deriv_loss_wrt_weights_hl1 = torch.mm(input_layer.T, deriv_loss_wrt_logits) / data.size(0)
+    deriv_loss_wrt_weights_hl1 = torch.mm(input_layer_relu.T, deriv_loss_wrt_logits) / data.size(0)
     deriv_loss_wrt_bias_hl1 = torch.sum(deriv_loss_wrt_logits, dim=0) / data.size(0)
 
     deriv_loss_wrt_input_layer_outputs = torch.mm(deriv_loss_wrt_logits, weights_hl1.T)
-    deriv_loss_wrt_weights_input = torch.mm(flattened_data.T, deriv_loss_wrt_input_layer_outputs) / data.size(0)
-    deriv_loss_wrt_bias_input = torch.sum(deriv_loss_wrt_input_layer_outputs, dim=0) / data.size(0)
+    deriv_loss_wrt_input_layer_outputs_activation = deriv_loss_wrt_input_layer_outputs * deriv_relu(input_layer)
+    deriv_loss_wrt_weights_input = torch.mm(flattened_data.T, deriv_loss_wrt_input_layer_outputs_activation) / data.size(0)
+    deriv_loss_wrt_bias_input = torch.sum(deriv_loss_wrt_input_layer_outputs_activation, dim=0) / data.size(0)
 
-    learning_rate = 0.001
+    learning_rate = 0.01
 
     weights_input -= learning_rate * deriv_loss_wrt_weights_input
     bias_input -= learning_rate * deriv_loss_wrt_bias_input
